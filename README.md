@@ -20,7 +20,14 @@ per essere riusabile anche in altri progetti.
   che in JSON.
 - **Wrapper Terraform/OpenTofu** (`tfexec.go`): `CreateTerraform`, `RunInit`,
   `NeedsInit` (controllo di allineamento provider via
-  `required_providers`/`.terraform.lock.hcl`), `RunApply`.
+  `required_providers`/`.terraform.lock.hcl`), `RunApply`, `RunOutput`.
+- **Output** (`outputs.go`): `RunOutput` legge gli output dello state dopo
+  `RunApply` (valore JSON con il tipo originale + flag `sensitive` del
+  modulo Terraform); `OutputsJSON` li riunisce in un unico oggetto JSON
+  `{"nome": valore}`, leggibile con JSON Pointer (`/vpc_id`, `/ips/0`);
+  `SensitiveOutputNames` elenca quelli marcati `sensitive = true`. I valori
+  sensibili sono restituiti in chiaro: dove conservarli lo decide il
+  chiamante.
 - **fileutils**, **s3utils**, **configs**: utility generiche di supporto
   (copia/patch di file locali, S3, configurazione dell'engine).
 
