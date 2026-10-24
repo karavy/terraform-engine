@@ -1,6 +1,7 @@
 package s3utils
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -51,4 +52,12 @@ func ReadObject(ctx context.Context, client *s3.Client, bucket, key string) ([]b
 		return nil, fmt.Errorf("l'oggetto %s/%s supera %d byte", bucket, key, MaxObjectBytes)
 	}
 	return data, nil
+}
+
+// WriteObject scrive un oggetto intero, sovrascrivendolo se esiste già.
+func WriteObject(ctx context.Context, client *s3.Client, bucket, key string, data []byte) error {
+	if _, err := client.PutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(bucket), Key: aws.String(key), Body: bytes.NewReader(data)}); err != nil {
+		return fmt.Errorf("scrittura di %s/%s fallita: %w", bucket, key, err)
+	}
+	return nil
 }

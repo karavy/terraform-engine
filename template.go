@@ -11,7 +11,25 @@ import (
 const (
 	startTag = "<FGT_FOR_STR>"
 	endTag   = "<FGT_FOR_END>"
+
+	// escapedOpen è il segnaposto con cui "\<" attraversa tutto il render senza poter
+	// essere preso per l'apertura di un tag; a fine render torna a essere "<".
+	escapedOpen = "\x00FGT_LT\x00"
 )
+
+// tagPattern riconosce un tag: solo lettere, cifre e "_" tra "<" e ">", così "<=", "<<EOT",
+// "a < b" o un ">" che sta righe dopo non vengono mai presi per un tag.
+var tagPattern = regexp.MustCompile(`<([A-Za-z0-9_]+)>`)
+
+// protectEscapes sostituisce ogni "\<" con il segnaposto: il tag che segue resta testo.
+func protectEscapes(content string) string {
+	return strings.ReplaceAll(content, "\\<", escapedOpen)
+}
+
+// restoreEscapes è l'inverso di protectEscapes: "\<" esce come "<" (senza backslash).
+func restoreEscapes(content string) string {
+	return strings.ReplaceAll(content, escapedOpen, "<")
+}
 
 // normalizzaMappaInMaiuscolo converte ricorsivamente tutte le chiavi in MAIUSCOLO
 // (invariata rispetto alla versione originale).
@@ -38,8 +56,7 @@ func normalizzaMappaInMaiuscolo(v interface{}) interface{} {
 // comportamento, incluso il fallback che aggiunge "_<index>" ai tag non
 // risolti).
 func processVariables(text string, index int, currentItemData map[string]interface{}, currentPath string) string {
-	reVars := regexp.MustCompile(`<([^>]+)>`)
-	return reVars.ReplaceAllStringFunc(text, func(match string) string {
+	return tagPattern.ReplaceAllStringFunc(text, func(match string) string {
 		varName := match[1 : len(match)-1]
 
 		if varName == "FGT_FOR_STR" || varName == "FGT_FOR_END" || strings.HasPrefix(varName, "FGT_FOR_STR") {
@@ -84,8 +101,7 @@ func processVariables(text string, index int, currentItemData map[string]interfa
 // motore (es. da un OperatorRule): quei tag DEVONO restare invariati se
 // non corrispondono a un campo dello spec, non diventare <FGT_X_0>.
 func processVariablesNoSuffix(text string, currentItemData map[string]interface{}, currentPath string) string {
-	reVars := regexp.MustCompile(`<([^>]+)>`)
-	return reVars.ReplaceAllStringFunc(text, func(match string) string {
+	return tagPattern.ReplaceAllStringFunc(text, func(match string) string {
 		varName := match[1 : len(match)-1]
 
 		if varName == "FGT_FOR_STR" || varName == "FGT_FOR_END" || strings.HasPrefix(varName, "FGT_FOR_STR") {
@@ -387,7 +403,7 @@ func splitIntoFiles(content, filename string, blocks []loopBlock, specMap map[st
 		}
 
 		newFilename := fmt.Sprintf("%s_%d%s", base, i+1, ext)
-		if err := os.WriteFile(newFilename, []byte(mainContent+siblingContent), 0644); err != nil {
+		if err := os.WriteFile(newFilename, []byte(restoreEscapes(mainContent+siblingContent)), 0644); err != nil {
 			return fmt.Errorf("errore scrittura file %s: %w", newFilename, err)
 		}
 		fmt.Printf("Generato file separato: %s\n", newFilename)
@@ -429,7 +445,7 @@ func writeAndEnsureDotTf(templateFilename, rendered string) error {
 	base, ext := SplitTerraformExt(templateFilename)
 	finalName := base + ext
 
-	if err := os.WriteFile(finalName, []byte(rendered), 0644); err != nil {
+	if err := os.WriteFile(finalName, []byte(restoreEscapes(rendered)), 0644); err != nil {
 		return fmt.Errorf("scrittura di %s fallita: %w", finalName, err)
 	}
 
@@ -474,7 +490,7 @@ func RenderTemplate(templateFilename string, spec interface{}) error {
 	if err != nil {
 		return fmt.Errorf("errore lettura template: %w", err)
 	}
-	content := strings.TrimSpace(string(contentBytes))
+	content := protectEscapes(strings.TrimSpace(string(contentBytes)))
 
 	blocks, err := findTopLevelLoops(content)
 	if err != nil {
