@@ -61,3 +61,27 @@ func WriteObject(ctx context.Context, client *s3.Client, bucket, key string, dat
 	}
 	return nil
 }
+
+// DeletePrefix cancella tutti gli oggetti la cui chiave inizia con prefix, uno alla volta, e
+// restituisce quanti ne ha cancellati. Un prefisso vuoto è rifiutato: cancellerebbe l'intero
+// bucket.
+func DeletePrefix(ctx context.Context, client *s3.Client, bucket, prefix string) (int, error) {
+	if prefix == "" {
+		return 0, errors.New("prefisso vuoto: si cancellerebbe l'intero bucket")
+	}
+	deleted := 0
+	pages := s3.NewListObjectsV2Paginator(client, &s3.ListObjectsV2Input{Bucket: aws.String(bucket), Prefix: aws.String(prefix)})
+	for pages.HasMorePages() {
+		page, err := pages.NextPage(ctx)
+		if err != nil {
+			return deleted, fmt.Errorf("elenco di %s/%s fallito: %w", bucket, prefix, err)
+		}
+		for _, object := range page.Contents {
+			if _, err := client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(bucket), Key: object.Key}); err != nil {
+				return deleted, fmt.Errorf("cancellazione di %s/%s fallita: %w", bucket, aws.ToString(object.Key), err)
+			}
+			deleted++
+		}
+	}
+	return deleted, nil
+}
